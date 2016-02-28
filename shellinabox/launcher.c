@@ -978,7 +978,7 @@ static void sigAlrmHandler(int sig ATTR_UNUSED, siginfo_t *info ATTR_UNUSED,
 }
 
 static pam_handle_t *internalLogin(struct Service *service, struct Utmp *utmp,
-                                   char ***environment) {
+                                   char ***environment, const char *url) {
   // Time out after 60 seconds
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -1014,6 +1014,20 @@ static pam_handle_t *internalLogin(struct Service *service, struct Utmp *utmp,
   const struct passwd *pw;
   pam_handle_t *pam            = NULL;
   if (service->authUser == 2 /* SSH */) {
+  char *ssh_cmd;
+  int x = 0;
+  const char ssh_template[10] = "?ssh=";
+  ssh_cmd = strstr(url, ssh_template);
+  if (ssh_cmd != NULL) {
+    ssh_cmd += 5;
+    for (x = 0; x < strlen(ssh_cmd); x++){
+      if (ssh_cmd[x] == '+')
+        ssh_cmd[x] = ' ';
+    }
+    strcpy(service->cmdline, ssh_cmd);
+  } else {
+
+
     // Just ask for the user name. SSH will negotiate the password
     char *user                 = NULL;
     char *prompt;
@@ -1059,6 +1073,9 @@ static pam_handle_t *internalLogin(struct Service *service, struct Utmp *utmp,
 
     free((void *)service->cmdline);
     service->cmdline           = cmdline;
+  }
+
+
 
     // Run SSH as an unprivileged user
     if ((service->uid          = restricted) == 0) {
@@ -1596,7 +1613,7 @@ static void childProcess(struct Service *service, int width, int height,
   // None of this really applies if we are running as an unprivileged user.
   // In that case, we do not bother about session management.
   if (!service->useLogin) {
-    pam_handle_t *pam           = internalLogin(service, utmp, &environment);
+    pam_handle_t *pam           = internalLogin(service, utmp, &environment, url);
 #if defined(HAVE_SECURITY_PAM_APPL_H)
     if (pam && !geteuid()) {
       if (pam_open_session(pam, PAM_SILENT) != PAM_SUCCESS) {
